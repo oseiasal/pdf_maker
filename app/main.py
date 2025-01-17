@@ -1,11 +1,11 @@
 from fastapi import FastAPI
-from .database import Base, engine
-from .routes import router
+from app.routes import router
+from app.database import Base, engine
+
+# Inicializa o banco de dados
+Base.metadata.create_all(bind=engine)
 
 app = FastAPI()
 
-# Inicializar o banco de dados
-Base.metadata.create_all(bind=engine)
-
-# Registrar as rotas
+# Inclui as rotas
 app.include_router(router)

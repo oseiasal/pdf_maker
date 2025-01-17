@@ -1,18 +1,19 @@
 import os
 from uuid import uuid4
-from PIL import Image
 from reportlab.pdfgen import canvas
 from reportlab.lib.pagesizes import letter
+from PIL import Image
 
-UPLOAD_DIR = "static/uploads"
 OUTPUT_DIR = "static/output"
+UPLOAD_DIR = "static/uploads"
 
-os.makedirs(UPLOAD_DIR, exist_ok=True)
-os.makedirs(OUTPUT_DIR, exist_ok=True)
-
-def create_pdf_from_images(files):
+def create_pdf_from_images(files, margin_type="nm"):
     pdf_id = str(uuid4())
-    pdf_path = os.path.join(OUTPUT_DIR, f"{pdf_id}.pdf")
+    pdf_name = f"{pdf_id}.pdf"
+    pdf_path = os.path.join(OUTPUT_DIR, pdf_name)
+
+    if not os.path.exists(OUTPUT_DIR):
+        os.makedirs(OUTPUT_DIR)
 
     imagens = []
     for file in files:
@@ -26,11 +27,13 @@ def create_pdf_from_images(files):
         with Image.open(imagem) as img:
             img.thumbnail((letter[0], letter[1]))
             largura, altura = img.size
-            c.drawImage(imagem, x=(letter[0] - largura) / 2, y=(letter[1] - altura) / 2, width=largura, height=altura)
+            margens = {"nm": 10, "sm": 20, "mm": 30, "lm": 40}
+            margem = margens.get(margin_type, 10)
+            c.drawImage(imagem, x=margem, y=margem, width=largura, height=altura)
             c.showPage()
 
     c.save()
     for imagem in imagens:
         os.remove(imagem)
 
-    return pdf_id, pdf_path
+    return pdf_id, pdf_name

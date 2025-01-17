@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, Form
 from sqlalchemy.orm import Session
 import os
 from fastapi.responses import HTMLResponse
@@ -10,71 +10,250 @@ from fastapi.responses import FileResponse
 router = APIRouter()
 
 @router.post("/imagens-para-pdf/")
-async def imagens_para_pdf(files: list[UploadFile], db: Session = Depends(get_db)):
+async def imagens_para_pdf(
+    files: list[UploadFile],
+    margin_type: str = Form(...),  # Adiciona o parâmetro de margem aqui
+    db: Session = Depends(get_db)
+):
+    # Validação do tipo de margem
+    if margin_type not in ['nm', 'sm', 'mm', 'lm']:
+        raise HTTPException(status_code=400, detail="Tipo de margem inválido.")
+
     if not files:
         raise HTTPException(status_code=400, detail="Nenhum arquivo enviado.")
 
-    pdf_id, pdf_path = create_pdf_from_images(files)
+    # Passa o tipo de margem para a função de criação do PDF
+    pdf_id, pdf_path = create_pdf_from_images(files, margin_type)
 
-    # Registrar no banco
+    # Registrar no banco de dados
     pdf_entry = PDFModel(id=pdf_id, file_name=f"{pdf_id}.pdf")
     db.add(pdf_entry)
     db.commit()
 
     return {"message": "PDF criado com sucesso!", "pdf_url": f"/download/{pdf_id}"}
 
-@router.get("/listar-pdfs", response_class=HTMLResponse)
-def listar_pdfs(db: Session = Depends(get_db)):
-    pdfs = db.query(PDFModel).order_by(PDFModel.created_at.desc()).all()
-    html_content = """
-    <!DOCTYPE html>
-    <html lang="en">
-    <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Lista de PDFs Criados</title>
-    </head>
-    <body>
-        <h1>PDFs Criados</h1>
-        <ul>
-    """
-    for pdf in pdfs:
-        pdf_url = f"/download/{pdf.id}"
-        html_content += f'<li><a href="{pdf_url}">{pdf.file_name}</a> - {pdf.created_at}</li>'
-    html_content += """
-        </ul>
-    </body>
-    </html>
-    """
-    return HTMLResponse(content=html_content)
-
 @router.get("/download/{pdf_id}")
 def download_pdf(pdf_id: str, db: Session = Depends(get_db)):
+    # Busca o registro do PDF no banco de dados
     pdf = db.query(PDFModel).filter(PDFModel.id == pdf_id).first()
     if not pdf:
-        raise HTTPException(status_code=404, detail="PDF não encontrado.")
+        raise HTTPException(status_code=404, detail="PDF não encontrado no banco de dados.")
     
-    pdf_path = f"static/output/{pdf.file_name}"
-    return FileResponse(pdf_path, media_type="application/pdf")
-#     return FileResponse(pdf_path, media_type="application/pdf", filename=pdf.file_name)
+    # Caminho absoluto do arquivo
+    pdf_path = os.path.abspath(os.path.join("static", "output", pdf.file_name))
+    print(f"PDF path: {pdf_path}")  # Log para depuração
+    
+    # Verifica se o arquivo existe no sistema de arquivos
+    if not os.path.isfile(pdf_path):
+        raise HTTPException(status_code=404, detail=f"Arquivo PDF não encontrado no servidor. Caminho: {pdf_path}")
+    
+    # Retorna o arquivo como resposta
+    return FileResponse(
+        path=pdf_path,
+        media_type="application/pdf",
+        # filename=pdf.file_name  # Nome do arquivo para download
+    )
 
 @router.get("/", response_class=HTMLResponse)
 def upload_page():
     html_content = """
     <!DOCTYPE html>
-    <html lang="en">
+    <html lang="pt-br">
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Upload de Imagens</title>
+        <title>Upload de Imagens para PDF</title>
+        <style>
+            body {
+                font-family: Arial, sans-serif;
+                margin: 20px;
+                background-color: #f4f4f9;
+            }
+            h1 {
+                color: #333;
+            }
+            form {
+                margin-bottom: 20px;
+                padding: 20px;
+                background-color: #ffffff;
+                border: 1px solid #ddd;
+                border-radius: 5px;
+                box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+            }
+            label {
+                font-weight: bold;
+                margin-bottom: 10px;
+                display: inline-block;
+            }
+            input[type="file"] {
+                margin: 10px 0;
+                padding: 10px;
+                border: 1px solid #ddd;
+                border-radius: 5px;
+                background-color: #fafafa;
+            }
+            button {
+                background-color: #4CAF50;
+                color: white;
+                padding: 10px 20px;
+                border: none;
+                cursor: pointer;
+                border-radius: 5px;
+            }
+            button:hover {
+                background-color: #45a049;
+            }
+            .status {
+                margin-top: 20px;
+                padding: 10px;
+                background-color: #e7f7e7;
+                border: 1px solid #d1f5d1;
+                color: #4CAF50;
+            }
+            .error {
+                margin-top: 20px;
+                padding: 10px;
+                background-color: #f8d7da;
+                border: 1px solid #f5c6cb;
+                color: #721c24;
+            }
+            .links {
+                margin-top: 20px;
+            }
+            .links a {
+                color: #007bff;
+                text-decoration: none;
+            }
+            .links a:hover {
+                text-decoration: underline;
+            }
+            #fileList {
+                margin-top: 10px;
+            }
+            #fileList li {
+                margin: 5px 0;
+            }
+        </style>
+        <script>
+            function updateFileList(event) {
+                const fileList = document.getElementById('fileList');
+                fileList.innerHTML = '';
+                const files = event.target.files;
+                for (let i = 0; i < files.length; i++) {
+                    let li = document.createElement('li');
+                    li.textContent = files[i].name;
+                    fileList.appendChild(li);
+                }
+            }
+            function showStatus(message, isError = false) {
+                const statusDiv = document.createElement('div');
+                statusDiv.className = isError ? 'error' : 'status';
+                statusDiv.textContent = message;
+                document.body.appendChild(statusDiv);
+            }
+        </script>
     </head>
     <body>
-        <h1>Upload de Imagens para PDF</h1>
-        <form action="/imagens-para-pdf/" method="post" enctype="multipart/form-data">
-            <input type="file" name="files" multiple>
-            <button type="submit">Enviar</button>
-        </form>
+        <h1>Upload de Imagens para Criar um PDF</h1>
+        <form action="/imagens-para-pdf" method="POST" enctype="multipart/form-data">
+    <label for="files">Selecione as imagens:</label>
+    <input type="file" id="files" name="files" multiple required><br><br>
+    
+    <label for="margin_type">Selecione o tipo de margem:</label>
+    <select id="margin_type" name="margin_type" required>
+        <option value="nm">Sem Margem</option>
+        <option value="sm">Pequena</option>
+        <option value="mm">Média</option>
+        <option value="lm">Grande</option>
+    </select><br><br>
+    
+    <input type="submit" value="Enviar">
+</form>
+
+        <div class="status">
+            <p>Após o upload, você poderá visualizar os PDFs gerados na página de <a href="/listar-pdfs">Listagem de PDFs</a>.</p>
+        </div>
     </body>
     </html>
     """
+    return HTMLResponse(content=html_content)
+
+@router.get("/listar-pdfs", response_class=HTMLResponse)
+def listar_pdfs(db: Session = Depends(get_db)):
+    pdfs = db.query(PDFModel).order_by(PDFModel.created_at.desc()).all()
+    
+    if not pdfs:
+        html_content = "<p>Nenhum PDF encontrado.</p>"
+    else:
+        html_content = """
+        <!DOCTYPE html>
+        <html lang="pt-br">
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>Lista de PDFs Criados</title>
+            <style>
+                body {
+                    font-family: Arial, sans-serif;
+                    margin: 20px;
+                    background-color: #f4f4f9;
+                }
+                h1 {
+                    color: #333;
+                }
+                table {
+                    width: 100%;
+                    border-collapse: collapse;
+                    margin-top: 20px;
+                }
+                table th, table td {
+                    padding: 10px;
+                    border: 1px solid #ddd;
+                    text-align: left;
+                }
+                th {
+                    background-color: #f2f2f2;
+                }
+                .links {
+                    margin-top: 20px;
+                }
+                .links a {
+                    color: #007bff;
+                    text-decoration: none;
+                }
+                .links a:hover {
+                    text-decoration: underline;
+                }
+            </style>
+        </head>
+        <body>
+            <h1>Lista de PDFs Criados</h1>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Nome do Arquivo</th>
+                        <th>Data de Criação</th>
+                        <th>Ação</th>
+                    </tr>
+                </thead>
+                <tbody>
+        """
+        
+        for pdf in pdfs:
+            pdf_url = f"/download/{pdf.id}"
+            html_content += f"""
+            <tr>
+                <td>{pdf.file_name}</td>
+                <td>{pdf.created_at}</td>
+                <td><a href="{pdf_url}" target="_blank">Visualizar</a></td>
+            </tr>
+            """
+        
+        html_content += """
+                </tbody>
+            </table>
+        </body>
+        </html>
+        """
+    
     return HTMLResponse(content=html_content)
