@@ -30,7 +30,12 @@ async def imagens_para_pdf(
     db.add(pdf_entry)
     db.commit()
 
-    return HTMLResponse(content=f"<a href='/download/{pdf_id}'>{pdf_id}</a>")
+    return HTMLResponse(content=f"""
+                        
+<div><a href='/' >Voltar</a></div>
+                        
+<div><a href='/download/{pdf_id}' target='_blank'>{pdf_id}</a></div>
+    """)
 
 @router.get("/download/{pdf_id}")
 def download_pdf(pdf_id: str, db: Session = Depends(get_db)):

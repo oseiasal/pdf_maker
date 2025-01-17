@@ -7,6 +7,16 @@ from PIL import Image
 OUTPUT_DIR = "static/output"
 UPLOAD_DIR = "static/uploads"
 
+
+def criar_pastas_necessarias():
+    """
+    Cria as pastas necessárias para o funcionamento do servidor.
+    """
+    pastas = ["static/output", "static/uploads"]
+    for pasta in pastas:
+        os.makedirs(pasta, exist_ok=True)
+        print(f"Pasta verificada/criada: {pasta}")
+
 def create_pdf_from_images(files, margin_type="nm"):
     pdf_id = str(uuid4())
     pdf_name = f"{pdf_id}.pdf"
