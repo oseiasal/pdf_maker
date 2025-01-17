@@ -55,7 +55,8 @@ def download_pdf(pdf_id: str, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="PDF não encontrado.")
     
     pdf_path = f"static/output/{pdf.file_name}"
-    return FileResponse(pdf_path, media_type="application/pdf", filename=pdf.file_name)
+    return FileResponse(pdf_path, media_type="application/pdf")
+#     return FileResponse(pdf_path, media_type="application/pdf", filename=pdf.file_name)
 
 @router.get("/", response_class=HTMLResponse)
 def upload_page():
