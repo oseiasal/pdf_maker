@@ -30,7 +30,7 @@ async def imagens_para_pdf(
     db.add(pdf_entry)
     db.commit()
 
-    return {"message": "PDF criado com sucesso!", "pdf_url": f"/download/{pdf_id}"}
+    return HTMLResponse(content=f"<a href='/download/{pdf_id}'>{pdf_id}</a>")
 
 @router.get("/download/{pdf_id}")
 def download_pdf(pdf_id: str, db: Session = Depends(get_db)):
@@ -133,6 +133,33 @@ def upload_page():
             #fileList li {
                 margin: 5px 0;
             }
+            .radio-group {
+                display: flex;
+                gap: 15px;
+                margin-top: 10px;
+            }
+            .radio-group label {
+                display: flex;
+                align-items: center;
+                gap: 5px;
+                cursor: pointer;
+            }
+            .radio-group input[type="radio"] {
+                display: none;
+            }
+            .radio-group input[type="radio"] + span {
+                display: inline-block;
+                padding: 5px 10px;
+                border: 2px solid #ddd;
+                border-radius: 5px;
+                background-color: #fafafa;
+                transition: background-color 0.2s, border-color 0.2s;
+            }
+            .radio-group input[type="radio"]:checked + span {
+                background-color: #4CAF50;
+                color: white;
+                border-color: #4CAF50;
+            }
         </style>
         <script>
             function updateFileList(event) {
@@ -156,19 +183,33 @@ def upload_page():
     <body>
         <h1>Upload de Imagens para Criar um PDF</h1>
         <form action="/imagens-para-pdf" method="POST" enctype="multipart/form-data">
-    <label for="files">Selecione as imagens:</label>
-    <input type="file" id="files" name="files" multiple required><br><br>
-    
-    <label for="margin_type">Selecione o tipo de margem:</label>
-    <select id="margin_type" name="margin_type" required>
-        <option value="nm">Sem Margem</option>
-        <option value="sm">Pequena</option>
-        <option value="mm">Média</option>
-        <option value="lm">Grande</option>
-    </select><br><br>
-    
-    <input type="submit" value="Enviar">
-</form>
+            <label for="files">Selecione as imagens:</label>
+            <input type="file" id="files" name="files" multiple required onchange="updateFileList(event)">
+            <ul id="fileList"></ul>
+            
+            <label for="margin_type">Selecione o tipo de margem:</label>
+            <div class="radio-group">
+                <label>
+                    <input type="radio" name="margin_type" value="nm" required>
+                    <span>Sem Margem</span>
+                </label>
+                <label>
+                    <input type="radio" name="margin_type" value="sm">
+                    <span>Pequena</span>
+                </label>
+                <label>
+                    <input type="radio" name="margin_type" value="mm">
+                    <span>Média</span>
+                </label>
+                <label>
+                    <input type="radio" name="margin_type" value="lm">
+                    <span>Grande</span>
+                </label>
+            </div>
+            
+            <br>
+            <button type="submit">Enviar</button>
+        </form>
 
         <div class="status">
             <p>Após o upload, você poderá visualizar os PDFs gerados na página de <a href="/listar-pdfs">Listagem de PDFs</a>.</p>
