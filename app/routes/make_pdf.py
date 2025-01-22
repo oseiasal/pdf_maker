@@ -1,15 +1,30 @@
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, Form
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, Form, HTTPException, Request
+from fastapi.responses import RedirectResponse, JSONResponse
+from authlib.integrations.starlette_client import OAuth 
+
 from sqlalchemy.orm import Session
 import os
 from fastapi.responses import HTMLResponse
-from .database import get_db
-from .models import PDFModel
-from .utils import create_pdf_from_images
+from ..database import get_db
+from ..models import PDFModel
+from ..utils import create_pdf_from_images
 from fastapi.responses import FileResponse
 
-router = APIRouter()
 
-@router.post("/imagens-para-pdf/")
+pdf_router = APIRouter()
+oauth = OAuth()
+
+oauth.register(
+    name="google",
+    client_id=os.getenv("GOOGLE_CLIENT_ID", "72235875188-dvif4dh4gq6cacj3grlfqo8vbentqbu9.apps.googleusercontent.com"),
+    client_secret=os.getenv("GOOGLE_CLIENT_SECRET", "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"),
+    server_metadata_url="https://accounts.google.com/.well-known/openid-configuration",
+    client_kwargs={"scope": "openid email"},
+)
+
+google = oauth.create_client("google")
+
+@pdf_router.post("/imagens-para-pdf/")
 async def imagens_para_pdf(
     files: list[UploadFile],
     margin_type: str = Form(...),  # Adiciona o parâmetro de margem aqui
@@ -37,7 +52,7 @@ async def imagens_para_pdf(
 <div><a href='/download/{pdf_id}' target='_blank'>{pdf_id}</a></div>
     """)
 
-@router.get("/download/{pdf_id}")
+@pdf_router.get("/download/{pdf_id}")
 def download_pdf(pdf_id: str, db: Session = Depends(get_db)):
     # Busca o registro do PDF no banco de dados
     pdf = db.query(PDFModel).filter(PDFModel.id == pdf_id).first()
@@ -59,7 +74,7 @@ def download_pdf(pdf_id: str, db: Session = Depends(get_db)):
         # filename=pdf.file_name  # Nome do arquivo para download
     )
 
-@router.get("/", response_class=HTMLResponse)
+@pdf_router.get("/upload", response_class=HTMLResponse)
 def upload_page():
     html_content = """
     <!DOCTYPE html>
@@ -224,7 +239,7 @@ def upload_page():
     """
     return HTMLResponse(content=html_content)
 
-@router.get("/listar-pdfs", response_class=HTMLResponse)
+@pdf_router.get("/listar-pdfs", response_class=HTMLResponse)
 def listar_pdfs(db: Session = Depends(get_db)):
     pdfs = db.query(PDFModel).order_by(PDFModel.created_at.desc()).all()
     
@@ -303,3 +318,50 @@ def listar_pdfs(db: Session = Depends(get_db)):
         """
     
     return HTMLResponse(content=html_content)
+
+
+# Página inicial com botão de login
+@pdf_router.get("/")
+async def home():
+    return HTMLResponse(content="""
+    <html>
+    <body>
+        <h1>Login com Google</h1>
+        <a href="/auth/google">Login com Google</a>
+    </body>
+    </html>
+    """)
+
+# Rota para iniciar o login com o Google
+@pdf_router.get("/auth/google")
+async def auth_google(request: Request):
+    redirect_uri = request.url_for("auth_google_callback")
+   
+    return await google.authorize_redirect(request, redirect_uri)
+
+# Rota de callback do @pdf_router.get("/auth/google/callback")
+async def auth_google_callback(request: Request):
+    try:
+        token = await google.authorize_access_token(request)
+        user_info = token.get("userinfo")
+        if not user_info:
+            raise HTTPException(status_code=400, detail="Erro ao obter informações do usuário.")
+        return JSONResponse(content={"message": "Login bem-sucedido", "user_info": user_info})
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Erro na autenticação: {str(e)}")
+
+
+@pdf_router.get("/auth/google/callback")
+async def auth_google_callback(request: Request):
+    try:
+        token = await oauth.google.authorize_access_token(request)
+        print("Token recebido:", token)  # Depuração
+        user_info = token.get("userinfo")
+        
+        if not user_info:
+            raise ValueError("As informações do usuário não estão disponíveis no token.")
+        
+        return {"user": user_info}
+    except Exception as e:
+        print("Erro:", str(e))
+        raise HTTPException(status_code=500, detail=f"Erro na autenticação: {str(e)}")
